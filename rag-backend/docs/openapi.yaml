@@ -1,0 +1,541 @@
+openapi: 3.0.3
+info:
+  title: AI PDF Chatbot LangGraph API
+  description: |
+    API documentation for the AI PDF Chatbot powered by LangChain and LangGraph.
+    This API provides endpoints for document ingestion and retrieval-based question answering.
+  version: 1.0.0
+  contact:
+    name: API Support
+    email: support@example.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:2024
+    description: Local development server
+  - url: https://api.example.com
+    description: Production server
+
+tags:
+  - name: Ingestion
+    description: Document ingestion and indexing operations
+  - name: Retrieval
+    description: Question answering and document retrieval operations
+  - name: Threads
+    description: Thread management operations
+  - name: Health
+    description: Health check and monitoring
+
+paths:
+  /threads:
+    post:
+      tags:
+        - Threads
+      summary: Create a new thread
+      description: Creates a new conversation thread for maintaining context across multiple interactions
+      operationId: createThread
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                metadata:
+                  type: object
+                  description: Optional metadata for the thread
+      responses:
+        '200':
+          description: Thread created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Thread'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    get:
+      tags:
+        - Threads
+      summary: List all threads
+      description: Retrieves a list of all existing threads
+      operationId: listThreads
+      parameters:
+        - name: limit
+          in: query
+          description: Maximum number of threads to return
+          schema:
+            type: integer
+            default: 100
+        - name: offset
+          in: query
+          description: Number of threads to skip
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: List of threads retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Thread'
+        '500':
+          description: Internal server error
+
+  /threads/{threadId}:
+    get:
+      tags:
+        - Threads
+      summary: Get thread by ID
+      description: Retrieves a specific thread by its ID
+      operationId: getThread
+      parameters:
+        - name: threadId
+          in: path
+          required: true
+          description: The ID of the thread to retrieve
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Thread retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Thread'
+        '404':
+          description: Thread not found
+        '500':
+          description: Internal server error
+
+    delete:
+      tags:
+        - Threads
+      summary: Delete a thread
+      description: Deletes a specific thread and all its associated messages
+      operationId: deleteThread
+      parameters:
+        - name: threadId
+          in: path
+          required: true
+          description: The ID of the thread to delete
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Thread deleted successfully
+        '404':
+          description: Thread not found
+        '500':
+          description: Internal server error
+
+  /threads/{threadId}/runs:
+    post:
+      tags:
+        - Ingestion
+        - Retrieval
+      summary: Execute a graph run
+      description: |
+        Executes either the ingestion or retrieval graph based on the assistant ID.
+        Use 'ingestion_graph' for document indexing and 'retrieval_graph' for question answering.
+      operationId: executeRun
+      parameters:
+        - name: threadId
+          in: path
+          required: true
+          description: The ID of the thread to run the graph on
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - assistant_id
+                - input
+              properties:
+                assistant_id:
+                  type: string
+                  enum:
+                    - ingestion_graph
+                    - retrieval_graph
+                  description: The graph to execute
+                input:
+                  type: object
+                  description: Input data for the graph
+                  oneOf:
+                    - $ref: '#/components/schemas/IngestionInput'
+                    - $ref: '#/components/schemas/RetrievalInput'
+                config:
+                  $ref: '#/components/schemas/GraphConfig'
+                stream_mode:
+                  type: array
+                  items:
+                    type: string
+                    enum:
+                      - messages
+                      - updates
+                      - events
+                  description: Streaming modes for real-time updates
+      responses:
+        '200':
+          description: Graph executed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunResult'
+            text/event-stream:
+              schema:
+                type: string
+                description: Server-sent events stream for real-time updates
+        '400':
+          description: Bad request - invalid input
+        '404':
+          description: Thread not found
+        '500':
+          description: Internal server error
+
+  /threads/{threadId}/runs/{runId}:
+    get:
+      tags:
+        - Retrieval
+      summary: Get run status
+      description: Retrieves the status and result of a specific run
+      operationId: getRunStatus
+      parameters:
+        - name: threadId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: runId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Run status retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunStatus'
+        '404':
+          description: Run not found
+        '500':
+          description: Internal server error
+
+  /threads/{threadId}/state:
+    get:
+      tags:
+        - Threads
+      summary: Get thread state
+      description: Retrieves the current state of a thread including all messages
+      operationId: getThreadState
+      parameters:
+        - name: threadId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Thread state retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ThreadState'
+        '404':
+          description: Thread not found
+        '500':
+          description: Internal server error
+
+  /health:
+    get:
+      tags:
+        - Health
+      summary: Health check
+      description: Check if the API is running and healthy
+      operationId: healthCheck
+      responses:
+        '200':
+          description: API is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: healthy
+                  timestamp:
+                    type: string
+                    format: date-time
+                  version:
+                    type: string
+                    example: 1.0.0
+
+components:
+  schemas:
+    Thread:
+      type: object
+      properties:
+        thread_id:
+          type: string
+          description: Unique identifier for the thread
+          example: "thread_abc123"
+        created_at:
+          type: string
+          format: date-time
+          description: Thread creation timestamp
+        metadata:
+          type: object
+          description: Additional metadata for the thread
+
+    ThreadState:
+      type: object
+      properties:
+        thread_id:
+          type: string
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/Message'
+        values:
+          type: object
+          description: Current state values
+
+    Message:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum:
+            - human
+            - ai
+            - system
+        content:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        metadata:
+          type: object
+
+    IngestionInput:
+      type: object
+      required:
+        - docs
+      properties:
+        docs:
+          type: array
+          description: Array of documents to ingest
+          items:
+            $ref: '#/components/schemas/Document'
+
+    Document:
+      type: object
+      required:
+        - pageContent
+      properties:
+        pageContent:
+          type: string
+          description: The text content of the document
+        metadata:
+          type: object
+          properties:
+            source:
+              type: string
+              description: Source file or URL
+            page:
+              type: integer
+              description: Page number if applicable
+            title:
+              type: string
+              description: Document title
+
+    RetrievalInput:
+      type: object
+      required:
+        - query
+      properties:
+        query:
+          type: string
+          description: The user's question or query
+          example: "What is the main topic of the document?"
+
+    GraphConfig:
+      type: object
+      properties:
+        configurable:
+          type: object
+          properties:
+            model_provider:
+              type: string
+              enum:
+                - openai
+                - anthropic
+                - azure
+              default: openai
+            model_name:
+              type: string
+              default: gpt-4-turbo-preview
+            temperature:
+              type: number
+              minimum: 0
+              maximum: 2
+              default: 0.7
+            retriever_provider:
+              type: string
+              enum:
+                - supabase
+                - chroma
+                - pinecone
+              default: supabase
+            k:
+              type: integer
+              description: Number of documents to retrieve
+              minimum: 1
+              maximum: 20
+              default: 4
+            filter:
+              type: object
+              description: Metadata filters for document retrieval
+
+    RunResult:
+      type: object
+      properties:
+        run_id:
+          type: string
+          description: Unique identifier for the run
+        thread_id:
+          type: string
+        status:
+          type: string
+          enum:
+            - pending
+            - running
+            - completed
+            - failed
+        result:
+          type: object
+          oneOf:
+            - $ref: '#/components/schemas/IngestionResult'
+            - $ref: '#/components/schemas/RetrievalResult'
+        created_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+
+    IngestionResult:
+      type: object
+      properties:
+        documents_indexed:
+          type: integer
+          description: Number of documents successfully indexed
+        chunks_created:
+          type: integer
+          description: Number of chunks created from documents
+        embedding_model:
+          type: string
+          description: Model used for embeddings
+        vector_store:
+          type: string
+          description: Vector store used for indexing
+
+    RetrievalResult:
+      type: object
+      properties:
+        answer:
+          type: string
+          description: The generated answer to the query
+        sources:
+          type: array
+          description: Source documents used to generate the answer
+          items:
+            $ref: '#/components/schemas/SourceDocument'
+        model_used:
+          type: string
+          description: The LLM model used for generation
+
+    SourceDocument:
+      type: object
+      properties:
+        content:
+          type: string
+          description: Relevant excerpt from the document
+        metadata:
+          type: object
+          properties:
+            source:
+              type: string
+            page:
+              type: integer
+            score:
+              type: number
+              description: Relevance score
+
+    RunStatus:
+      type: object
+      properties:
+        run_id:
+          type: string
+        status:
+          type: string
+          enum:
+            - pending
+            - running
+            - completed
+            - failed
+        progress:
+          type: number
+          minimum: 0
+          maximum: 100
+          description: Progress percentage
+        current_step:
+          type: string
+          description: Current step being executed
+        error:
+          type: string
+          description: Error message if status is failed
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message
+        code:
+          type: string
+          description: Error code
+        details:
+          type: object
+          description: Additional error details
+
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+    BearerAuth:
+      type: http
+      scheme: bearer
+
+security:
+  - ApiKeyAuth: []
+  - BearerAuth: []
