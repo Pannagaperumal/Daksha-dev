@@ -33,11 +33,16 @@ async function checkQueryType(
     query: state.query,
   });
 
-  const response = await model
-    .withStructuredOutput(schema)
-    .invoke(formattedPrompt.toString());
-
-  const route = response.route;
+  let route: 'retrieve' | 'direct' = 'retrieve';
+  try {
+    const response = await model
+      .withStructuredOutput(schema, { method: 'jsonMode' })
+      .invoke(formattedPrompt.toString());
+    if (response?.route) route = response.route;
+  } catch {
+    // Local/small models can fail structured output; default to retrieving
+    // context, which is the safer choice for a document-grounded chat.
+  }
 
   return { route };
 }

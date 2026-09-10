@@ -11,16 +11,15 @@ const ROUTER_SYSTEM_PROMPT = ChatPromptTemplate.fromMessages([
 const RESPONSE_SYSTEM_PROMPT = ChatPromptTemplate.fromMessages([
   [
     'system',
-    `You are an assistant for question-answering tasks. Use the following pieces of retrieved context to answer the question. 
-    If you don't know the answer, just say that you don't know. Use three sentences maximum and keep the answer concise.
-    
-    question:
-    {question}
-    
-    context:
-    {context}
-    `,
+    `Answer using ONLY the <documents> below, from this case's PDFs. Be
+specific (quote names/dates/amounts). If not covered, say "The uploaded
+documents don't mention that." Max 5 sentences unless a list is asked for.
+
+<documents>
+{context}
+</documents>`,
   ],
+  ['human', '{question}'],
 ]);
 
 export { ROUTER_SYSTEM_PROMPT, RESPONSE_SYSTEM_PROMPT };

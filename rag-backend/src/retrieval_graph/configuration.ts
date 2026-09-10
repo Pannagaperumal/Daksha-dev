@@ -34,6 +34,6 @@ export function ensureAgentConfiguration(
   const baseConfig = ensureBaseConfiguration(config);
   return {
     ...baseConfig,
-    queryModel: configurable.queryModel || 'openai/gpt-4o',
+    queryModel: configurable.queryModel || 'local/qwen2.5-1.5b-instruct',
   };
 }

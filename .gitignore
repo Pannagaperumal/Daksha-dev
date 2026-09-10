@@ -52,3 +52,12 @@ test_docs
 
 .swc
 backend/legal_platform/__pycache__/
+backend/.venv
+backend/accounts/__pycache__
+backend/cases/__pycache__
+backend/media/
+backend/documents/__pycache__/
+backend/accounts/migrations/__pycache__/
+backend/cases/migrations/__pycache__/
+
+backend/documents/migrations/__pycache__/

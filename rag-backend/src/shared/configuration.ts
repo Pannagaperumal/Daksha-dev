@@ -15,9 +15,9 @@ import { RunnableConfig } from '@langchain/core/runnables';
 export const BaseConfigurationAnnotation = Annotation.Root({
   /**
    * The vector store provider to use for retrieval.
-   * Options are 'supabase', but you can add more providers here and create their own retriever functions
+   * Options are 'supabase' or 'chroma' (self-hosted, local embeddings).
    */
-  retrieverProvider: Annotation<'supabase'>,
+  retrieverProvider: Annotation<'supabase' | 'chroma'>,
 
   /**
    * Additional keyword arguments to pass to the search function of the retriever for filtering.
@@ -44,7 +44,7 @@ export function ensureBaseConfiguration(
     typeof BaseConfigurationAnnotation.State
   >;
   return {
-    retrieverProvider: configurable.retrieverProvider || 'supabase',
+    retrieverProvider: configurable.retrieverProvider || 'chroma',
     filterKwargs: configurable.filterKwargs || {},
     k: configurable.k || 5,
   };

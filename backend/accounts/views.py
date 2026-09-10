@@ -2,13 +2,42 @@ from rest_framework import viewsets, status, generics
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
-from django.contrib.auth import get_user_model
+from rest_framework.views import APIView
+from rest_framework.authtoken.models import Token
+from django.contrib.auth import get_user_model, authenticate
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 from .models import LawyerUser
-from .serializers import LawyerUserSerializer, UserRegistrationSerializer, ChangePasswordSerializer
+from .serializers import LawyerUserSerializer, UserRegistrationSerializer, ChangePasswordSerializer, LoginSerializer
 
 User = get_user_model()
+
+
+class LoginView(APIView):
+    """
+    Authenticate with username/password and receive an auth token.
+    """
+    permission_classes = [AllowAny]
+
+    @swagger_auto_schema(
+        operation_description="Log in and obtain an auth token",
+        request_body=LoginSerializer,
+        responses={200: openapi.Response('Token and user profile'), 400: 'Invalid credentials'}
+    )
+    def post(self, request):
+        serializer = LoginSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = authenticate(
+            username=serializer.validated_data['username'],
+            password=serializer.validated_data['password'],
+        )
+        if user is None:
+            return Response({'detail': 'Invalid credentials'}, status=status.HTTP_400_BAD_REQUEST)
+        token, _ = Token.objects.get_or_create(user=user)
+        return Response({
+            'token': token.key,
+            'user': LawyerUserSerializer(user).data,
+        })
 
 
 class LawyerUserViewSet(viewsets.ModelViewSet):
@@ -88,4 +117,11 @@ class UserRegistrationView(generics.CreateAPIView):
         }
     )
     def post(self, request, *args, **kwargs):
-        return super().post(request, *args, **kwargs)
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+        token, _ = Token.objects.get_or_create(user=user)
+        return Response(
+            {'token': token.key, 'user': LawyerUserSerializer(user).data},
+            status=status.HTTP_201_CREATED,
+        )

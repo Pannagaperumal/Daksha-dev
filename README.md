@@ -1,276 +1,121 @@
-# AI PDF Chatbot & Agent Powered by LangChain and LangGraph
+# Daksha
 
-This monorepo is a customizable template example of an AI chatbot agent that "ingests" PDF documents, stores embeddings in a vector database (Supabase), and then answers user queries using OpenAI (or another LLM provider) utilising LangChain and LangGraph as orchestration frameworks.
+Daksha is a legal case management platform with an AI-powered document/PDF chatbot built in. It has two backend services and (soon) a frontend:
 
-This template is also an accompanying example to the book [Learning LangChain (O'Reilly)](https://www.oreilly.com/library/view/learning-langchain/9781098167271): Building AI and LLM applications with LangChain and LangGraph.
+- **`backend/`** — Django REST API for the core legal platform: lawyer users, cases, and case documents.
+- **`rag-backend/`** — a Node.js/TypeScript LangGraph service that ingests PDFs, stores embeddings in a vector store (Supabase), and answers questions over them using an LLM (OpenAI or another LangChain-supported provider).
+- **`frontend/`** — not built yet. There is currently no UI; both backends are consumed directly via their REST/HTTP APIs.
 
-**Here's what the Chatbot UI looks like:**
-
-<img width="1096" alt="Screenshot 2025-02-20 at 05 39 55" src="https://github.com/user-attachments/assets/3a9ddea7-b718-476b-bdae-38839be20c12" />
+> This repo started from the [`ai-pdf-chatbot-langchain`](https://github.com/mayooear/ai-pdf-chatbot-langchain) template (the RAG piece in `rag-backend/`), and the Django `backend/` legal-platform app was added on top. The root `package.json` still lists a `frontend` workspace from that original template — ignore it until a real frontend exists here.
 
 ## Table of Contents
 
-1. [Features](#features)
-2. [Architecture Overview](#architecture-overview)
-3. [Prerequisites](#prerequisites)
-4. [Installation](#installation)
+1. [Architecture](#architecture)
+2. [Prerequisites](#prerequisites)
+3. [Running the Django backend](#running-the-django-backend)
+4. [Running the rag-backend](#running-the-rag-backend)
 5. [Environment Variables](#environment-variables)
-   - [Frontend Variables](#frontend-variables)
-   - [Backend Variables](#backend-variables)
-6. [Local Development](#local-development)
-   - [Running the Backend](#running-the-backend)
-   - [Running the Frontend](#running-the-frontend)
-7. [Usage](#usage)
-   - [Uploading/Ingesting PDFs](#uploadingingesting-pdfs)
-   - [Asking Questions](#asking-questions)
-   - [Viewing Chat History](#viewing-chat-history)
-8. [Production Build & Deployment](#production-build--deployment)
-9. [Customizing the Agent](#customizing-the-agent)
-10. [Troubleshooting](#troubleshooting)
-11. [Next Steps](#next-steps)
+6. [API Overview](#api-overview)
+7. [Customizing the RAG Agent](#customizing-the-rag-agent)
+8. [Troubleshooting](#troubleshooting)
 
 ---
 
-## Features
-
-- **Document Ingestion Graph**: Upload and parse PDFs into `Document` objects, then store vector embeddings into a vector database (we use Supabase in this example).
-- **Retrieval Graph**: Handle user questions, decide whether to retrieve documents or give a direct answer, then generate concise responses with references to the retrieved documents.
-- **Streaming Responses**: Real-time streaming of partial responses from the server to the client UI.
-- **LangGraph Integration**: Built using LangGraph’s state machine approach to orchestrate ingestion and retrieval, visualise your agentic workflow, and debug each step of the graph.  
-- **Next.js Frontend**: Allows file uploads, real-time chat, and easy extension with React components and Tailwind.
-
----
-
-## Architecture Overview
+## Architecture
 
 ```ascii
-┌─────────────────────┐    1. Upload PDFs    ┌───────────────────────────┐
-│Frontend (Next.js)   │ ────────────────────> │Backend (LangGraph)       │
-│ - React UI w/ chat  │                      │ - Ingestion Graph         │
-│ - Upload .pdf files │ <────────────────────┤   + Vector embedding via  │
-└─────────────────────┘    2. Confirmation   │     SupabaseVectorStore   │
-(storing embeddings in DB)
-
-┌─────────────────────┐    3. Ask questions  ┌───────────────────────────┐
-│Frontend (Next.js)   │ ────────────────────> │Backend (LangGraph)       │
-│ - Chat + SSE stream │                      │ - Retrieval Graph         │
-│ - Display sources   │ <────────────────────┤   + Chat model (OpenAI)   │
-└─────────────────────┘ 4. Streamed answers  └───────────────────────────┘
-
+┌───────────────────────────┐          ┌────────────────────────────┐
+│ backend/ (Django)         │          │ rag-backend/ (LangGraph)    │
+│ - accounts, cases,        │          │ - ingestion_graph            │
+│   documents REST API      │          │ - retrieval_graph             │
+│ - SQLite (dev), DRF,      │          │ - vector store: Supabase      │
+│   Swagger/OpenAPI docs    │          │ - LLM: OpenAI (or other)      │
+│ - port 8000               │          │ - port 2024                   │
+└───────────────────────────┘          └────────────────────────────┘
 ```
-- **Supabase** is used as the vector store to store and retrieve relevant documents at query time.  
-- **OpenAI** (or other LLM providers) is used for language modeling.  
-- **LangGraph** orchestrates the "graph" steps for ingestion, routing, and generating responses.  
-- **Next.js** (React) powers the user interface for uploading PDFs and real-time chat.
 
-The system consists of:
-- **Backend**: A Node.js/TypeScript service that contains LangGraph agent "graphs" for:
-  - **Ingestion** (`src/ingestion_graph.ts`) - handles indexing/ingesting documents
-  - **Retrieval** (`src/retrieval_graph.ts`) - question-answering over the ingested documents
-  - **Configuration** (`src/shared/configuration.ts`) - handles configuration for the backend api including model providers and vector stores
-- **Frontend**: A Next.js/React app that provides a web UI for users to upload PDFs and chat with the AI.
----
+The two services are independent today — there is no wiring between the Django app's `documents` model and the `rag-backend` ingestion graph yet. Each is run and used separately.
 
 ## Prerequisites
 
-1. **Node.js v18+** (we recommend Node v20).
-2. **Yarn** (or npm, but this monorepo is pre-configured with Yarn).
-3. **Supabase project** (if you plan to store embeddings in Supabase; see [Setting up Supabase](https://supabase.com/docs/guides/getting-started)).
-   - You will need:
-     - `SUPABASE_URL`
-     - `SUPABASE_SERVICE_ROLE_KEY`
-     - A table named `documents` and a function named `match_documents` for vector similarity search (see [LangChain documentation for guidance on setting up the tables](https://js.langchain.com/docs/integrations/vectorstores/supabase/)).
-4. **OpenAI API Key** (or another LLM provider’s key, supported by LangChain).
-5. **LangChain API Key** (free and optional, but highly recommended for debugging and tracing your LangChain and LangGraph applications). Learn more [here](https://docs.smith.langchain.com/administration/how_to_guides/organization_management/create_account_api_key)
+- **Python 3.12+** for the Django backend
+- **Node.js v20+** and **npm** (or Yarn) for `rag-backend`
+- **OpenAI API key** (or another LangChain-supported LLM provider key) and a **Supabase project** if you want `rag-backend` to actually answer questions (see [Environment Variables](#environment-variables)) — without these it still starts and its API is reachable, but ingestion/retrieval calls will fail.
 
----
-
-## Installation
-
-1. **Clone** the repository:
-
-   ```bash
-   git clone https://github.com/mayooear/ai-pdf-chatbot-langchain.git
-   cd ai-pdf-chatbot-langchain
-   ```
-
-2.	Install dependencies (from the monorepo root):
-
-yarn install
-
-	3.	Configure environment variables in both backend and frontend. See .`env.example` files for details.
-
-## Environment Variables
-
-The project relies on environment variables to configure keys and endpoints. Each sub-project (backend and frontend) has its own .env.example. Copy these to .env and fill in your details.
-
-### Frontend Variables
-
-Create a .env file in frontend:
-
-`cp frontend/.env.example frontend/.env`
-
-```
-    NEXT_PUBLIC_LANGGRAPH_API_URL=http://localhost:2024
-    LANGCHAIN_API_KEY=your-langsmith-api-key-here # Optional: LangSmith API key
-    LANGGRAPH_INGESTION_ASSISTANT_ID=ingestion_graph
-    LANGGRAPH_RETRIEVAL_ASSISTANT_ID=retrieval_graph
-
-    LANGCHAIN_TRACING_V2=true # Optional: Enable LangSmith tracing
-
-    LANGCHAIN_PROJECT="pdf-chatbot" # Optional: LangSmith project name
-```
-
-### Backend Variables
-
-Create a .env file in backend:
-
-`cp backend/.env.example backend/.env`
-
-```
-    OPENAI_API_KEY=your-openai-api-key-here
-    SUPABASE_URL=your-supabase-url-here
-    SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key-here
-
-    LANGCHAIN_TRACING_V2=true # Optional: Enable LangSmith tracing
-
-    LANGCHAIN_PROJECT="pdf-chatbot" # Optional: LangSmith project name
-```
-
-**Explanation of Environment Variables:**
-
--   `NEXT_PUBLIC_LANGGRAPH_API_URL`: The URL where your LangGraph backend server is running.  Defaults to `http://localhost:2024` for local development. 
--   `LANGCHAIN_API_KEY`: Your LangSmith API key.  This is optional, but highly recommended for debugging and tracing your LangChain and LangGraph applications.
--   `LANGGRAPH_INGESTION_ASSISTANT_ID`: The ID of the LangGraph assistant for document ingestion. Default is `ingestion_graph`.
--   `LANGGRAPH_RETRIEVAL_ASSISTANT_ID`: The ID of the LangGraph assistant for question answering. Default is `retrieval_graph`.
--   `LANGCHAIN_TRACING_V2`:  Enable tracing to debug your application on the LangSmith platform.  Set to `true` to enable.
--   `LANGCHAIN_PROJECT`:  The name of your LangSmith project.
--   `OPENAI_API_KEY`: Your OpenAI API key.
--   `SUPABASE_URL`: Your Supabase URL.
--   `SUPABASE_SERVICE_ROLE_KEY`: Your Supabase service role key.
-
-
-
-## Local Development
-
-This monorepo uses Turborepo to manage both backend and frontend projects. You can run them separately for development.
-
-### Running the Backend
-
-1.	Navigate to backend:
+## Running the Django backend
 
 ```bash
 cd backend
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+.venv/bin/python manage.py migrate
+.venv/bin/python manage.py runserver 0.0.0.0:8000
 ```
 
-2.	Install dependencies (already done if you ran yarn install at the root).
+- API root: `http://localhost:8000/api/`
+- Swagger UI: `http://localhost:8000/swagger/`
+- ReDoc: `http://localhost:8000/redoc/`
+- Django admin: `http://localhost:8000/admin/` (create a superuser first with `manage.py createsuperuser`)
 
-3.	Start LangGraph in dev mode:
+Uses SQLite by default (`backend/db.sqlite3`), so no external database setup is needed for local dev.
+
+## Running the rag-backend
 
 ```bash
-yarn langgraph:dev
+cd rag-backend
+npm install --legacy-peer-deps   # peer-dep conflict between langchain/typeorm packages as of this writing
+cp .env.example .env             # then fill in real keys, see below
+npx @langchain/langgraph-cli dev --port 2024
 ```
 
-This will launch a local LangGraph server on port 2024 by default. It should redirect you to a UI for interacting with the LangGraph server. [Langgraph studio guide](https://langchain-ai.github.io/langgraph/concepts/langgraph_studio/)
+- API: `http://localhost:2024`
+- Studio UI link is printed on startup (opens LangGraph Studio pointed at your local server)
+- `GET /info` and `POST /assistants/search` are good smoke-test endpoints once it's up
 
-### Running the Frontend
+## Environment Variables
 
-1. Navigate to frontend:
+`rag-backend/.env` (copy from `rag-backend/.env.example`):
 
-```bash
-cd frontend
+```
+OPENAI_API_KEY=your-openai-api-key-here
+SUPABASE_URL=your-supabase-url-here
+SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key-here
+
+LANGCHAIN_TRACING_V2=false           # set true only if you have a real LangSmith key
+LANGCHAIN_API_KEY=your-langsmith-api-key-here   # optional
+LANGCHAIN_PROJECT=ai-agent-pdf-chatbot          # optional
 ```
 
-2. Start the Next.js development server:
+Notes:
+- Leave `LANGCHAIN_TRACING_V2=false` unless you have a valid `LANGCHAIN_API_KEY` — with tracing on and no/invalid key, the dev server logs a `403 Forbidden` from LangSmith on every startup (harmless, but noisy).
+- `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY` need a `documents` table and `match_documents` function set up per the [LangChain Supabase vector store docs](https://js.langchain.com/docs/integrations/vectorstores/supabase/).
 
-```bash
-yarn dev
-```
+The Django `backend/` has no required environment variables for local development — `SECRET_KEY`, `DEBUG`, and the SQLite path are hardcoded in `legal_platform/settings.py` for now. Treat that as fine for local dev only, not production.
 
-This will start a local Next.js development server (by default on port 3000).
+## API Overview
 
-Access the UI in your browser at http://localhost:3000.
+The Django backend exposes:
 
-## Usage
+- `POST /api/accounts/register/` — register a lawyer user
+- `/api/accounts/users/` — user profile CRUD (`me`, `update_profile`, `change_password` actions)
+- `/api/cases/cases/` — case CRUD (`my_cases`, `statistics`, `add_comment`, `comments` actions)
+- `/api/cases/labels/`, `/api/cases/comments/`
+- `/api/documents/documents/` — document CRUD, with `category`/`case`/`is_confidential` filtering
+- `/api/documents/categories/`, `/api/documents/versions/`, `/api/documents/shares/`
 
-Once both services are running:
+Full request/response schemas are in Swagger (`/swagger/`). Most endpoints require an authenticated user.
 
-1. Use langgraph studio UI to interact with the LangGraph server and ensure the workflow is working as expected.
+## Customizing the RAG Agent
 
-2. Navigate to http://localhost:3000 to use the chatbot UI.
-
-3. Upload a small PDF document via the file upload button at the bottom of the page. This will trigger the ingestion graph to extract the text and store the embeddings in Supabase via the frontend `app/api/ingest` route.
-	
-4. After the ingestion is complete, ask questions in the chat input.
-
-5. The chatbot will trigger the retrieval graph via the `app/api/chat` route to retrieve the most relevant documents from the vector database and use the relevant PDF context (if needed) to answer.
-
-
-### Uploading/Ingesting PDFs
-
-Click on the paperclip icon in the chat input area.
-
-Select one or more PDF files to upload ensuring a total of max 5, each under 10MB (you can change these threshold values in the `app/api/ingest` route).
-
-The backend processes the PDFs, extracts text, and stores embeddings in Supabase (or your chosen vector store).
-
-### Asking Questions
-
-- Type your question in the chat input field.
-- Responses stream in real time. If the system retrieved documents, you’ll see a link to “View Sources” for each chunk of text used in the answer.
-
-### Viewing Chat History
-
-- The system creates a unique thread per user session (frontend). All messages are kept in the state for the session.
-- For demonstration purposes, the current example UI does not store the entire conversation beyond the local thread state and is not persistent across sessions. You can extend it to persist threads in a database. However, the "ingested documents" are persistent across sessions as they are stored in a vector database.
-
-
-## Deploying the Backend
-
-To deploy your LangGraph agent to a cloud service, you can either use LangGraph's cloud as per this [guide](https://langchain-ai.github.io/langgraph/cloud/quick_start/?h=studio#deploy-to-langgraph-cloud) or self-host it as per this [guide](https://langchain-ai.github.io/langgraph/how-tos/deploy-self-hosted/).
-
-## Deploying the Frontend
-The frontend can be deployed to any hosting that supports Next.js (Vercel, Netlify, etc.).
-
-Make sure to set relevant environment variables in your deployment environment. In particular, ensure `NEXT_PUBLIC_LANGGRAPH_API_URL` is pointing to your deployed backend URL.
-
-## Customizing the Agent
-
-You can customize the agent on the backend and frontend.
-
-### Backend
-
-- In the configuration file `src/shared/configuration.ts`, you can change the default configs i.e. the vector store, k-value, and filter kwargs, shared between the ingestion and retrieval graphs. On the backend, configs can be used in each node of the graph workflow or from frontend, you can pass a config object into the graph's client.
-- You can adjust the prompts in the `src/retrieval_graph/prompts.ts` file.
-- If you'd like to change the retrieval model, you can do so in the `src/shared/retrieval.ts` file by adding another retriever function that encapsulates the desired client for the vector store and then updating the `makeRetriever` function to return the new retriever.
-
-
-### Frontend
-
-- You can modify the file upload restrictions in the `app/api/ingest` route.
-- In `constants/graphConfigs.ts`, you can change the default config objects sent to the ingestion and retrieval graphs. These include the model provider, k value (no of source documents to retrieve), and retriever provider (i.e. vector store).
-
+- `rag-backend/src/shared/configuration.ts` — shared defaults (vector store, `k` value, filter kwargs) for both graphs.
+- `rag-backend/src/retrieval_graph/prompts.ts` — prompts used by the retrieval graph.
+- `rag-backend/src/shared/retrieval.ts` — add a new retriever function here (and register it in `makeRetriever`) to swap the vector store.
+- `rag-backend/src/ingestion_graph/graph.ts` / `retrieval_graph/graph.ts` — the actual LangGraph graph definitions.
 
 ## Troubleshooting
-1. .env Not Loaded
-   - Make sure you copied .env.example to .env in both backend and frontend.
-   - Check your environment variables are correct and restart the dev server.
 
-2. Supabase Vector Store
-   - Ensure you have configured your Supabase instance with the documents table and match_documents function. Check the official LangChain docs on Supabase integration.
-
-3. OpenAI Errors
-   - Double-check your OPENAI_API_KEY. Make sure you have enough credits/quota.
-
-4. LangGraph Not Running
-   - If yarn langgraph:dev fails, confirm your Node version is >= 18 and that you have all dependencies installed.
-
-5. Network Errors
-   - Frontend must point to the correct NEXT_PUBLIC_LANGGRAPH_API_URL. By default, it is http://localhost:2024.
-
-## Next Steps
-
-If you'd like to contribute to this project, feel free to open a pull request. Ensure it is well documented and includes tests in the test files.
-
-If you'd like to learn more about building AI chatbots and agents with LangChain and LangGraph, check out the book [Learning LangChain (O'Reilly)](https://www.oreilly.com/library/view/learning-langchain/9781098167271/).
-
+1. **Swagger shows no endpoints / 404 on API routes** — make sure `legal_platform/urls.py` includes each app's `urls.py` under `/api/...` (this was previously missing entirely; see git history). Restart `runserver` after adding new installed apps or dependencies — Django's autoreloader does not recover from an import error on its own.
+2. **`ModuleNotFoundError: No module named 'django_filters'`** — `pip install -r requirements.txt` in the backend's venv, then restart the server (a fresh process, not just a file save).
+3. **`rag-backend` install fails with `ERESOLVE`** — use `npm install --legacy-peer-deps`; there's an unresolved peer-dependency conflict between `@langchain/community`/`langchain`'s optional `typeorm` dependency and `better-sqlite3`.
+4. **`rag-backend` logs a `403 Forbidden` fetching `/sessions` on startup** — `LANGCHAIN_TRACING_V2=true` with no/invalid `LANGCHAIN_API_KEY`. Set it to `false` or provide a real key.
+5. **No frontend** — there isn't one yet in this repo. Both APIs above are usable directly (curl, Postman, Swagger UI) until a UI is built.

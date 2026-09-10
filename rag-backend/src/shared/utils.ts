@@ -1,5 +1,6 @@
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { initChatModel } from 'langchain/chat_models/universal';
+import { ChatOpenAI } from '@langchain/openai';
 
 const SUPPORTED_PROVIDERS = [
   'openai',
@@ -28,6 +29,20 @@ export async function loadChatModel(
   fullySpecifiedName: string,
   temperature: number = 0.2,
 ): Promise<BaseChatModel> {
+  // Local models served by llama.cpp's OpenAI-compatible /v1/chat/completions
+  // endpoint (e.g. `llama-server -m <model>.gguf --port 8081`).
+  if (fullySpecifiedName.startsWith('local/')) {
+    return new ChatOpenAI({
+      model: fullySpecifiedName.slice('local/'.length),
+      apiKey: 'not-needed',
+      temperature,
+      maxTokens: 200,
+      configuration: {
+        baseURL: process.env.LOCAL_CHAT_URL || 'http://localhost:8081/v1',
+      },
+    });
+  }
+
   const index = fullySpecifiedName.indexOf('/');
   if (index === -1) {
     // If there's no "/", assume it's just the model

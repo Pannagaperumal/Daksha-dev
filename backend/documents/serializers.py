@@ -44,13 +44,13 @@ class DocumentSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Document
-        fields = ['id', 'case', 'case_number', 'case_title', 'title', 
+        fields = ['id', 'case', 'case_number', 'case_title', 'title',
                   'description', 'document_type', 'category', 'category_detail',
-                  'file', 'file_size', 'file_extension', 'uploaded_by', 
-                  'uploaded_by_detail', 'is_confidential', 'tags', 
+                  'file', 'file_size', 'file_extension', 'uploaded_by',
+                  'uploaded_by_detail', 'is_confidential', 'tags', 'is_indexed',
                   'versions_count', 'shares_count', 'created_at', 'updated_at']
-        read_only_fields = ['id', 'file_size', 'file_extension', 'uploaded_by', 
-                           'created_at', 'updated_at']
+        read_only_fields = ['id', 'file_size', 'file_extension', 'uploaded_by',
+                           'is_indexed', 'created_at', 'updated_at']
     
     def get_versions_count(self, obj):
         return obj.versions.count()

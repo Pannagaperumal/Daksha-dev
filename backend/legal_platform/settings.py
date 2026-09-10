@@ -40,7 +40,9 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     # Third party apps
     'rest_framework',
+    'rest_framework.authtoken',
     'corsheaders',
+    'django_filters',
     'drf_yasg',
     # Local apps
     'accounts',
@@ -143,6 +145,7 @@ AUTH_USER_MODEL = 'accounts.LawyerUser'
 # REST Framework settings
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.TokenAuthentication',
         'rest_framework.authentication.SessionAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
@@ -161,3 +164,6 @@ CORS_ALLOWED_ORIGINS = [
 # File upload settings
 FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10 MB
 DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10 MB
+
+# rag-backend app-server (ingestion + chat over uploaded documents)
+RAG_APP_SERVER_URL = os.environ.get('RAG_APP_SERVER_URL', 'http://localhost:2100')

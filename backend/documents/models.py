@@ -50,7 +50,12 @@ class Document(models.Model):
     
     is_confidential = models.BooleanField(default=False)
     tags = models.TextField(blank=True, null=True, help_text="Comma-separated tags")
-    
+
+    is_indexed = models.BooleanField(
+        default=False,
+        help_text="Whether this document has been ingested into the RAG vector store for chat.",
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
