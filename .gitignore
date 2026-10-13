@@ -61,3 +61,5 @@ backend/accounts/migrations/__pycache__/
 backend/cases/migrations/__pycache__/
 
 backend/documents/migrations/__pycache__/
+brag-output
+
